@@ -36,7 +36,7 @@ export default function VerifyEmailPage() {
     // Only reveal the code locally. Production relies on the real email, and
     // EmailJS being configured should hide the hint too.
     if (process.env.NODE_ENV !== "production" && !isEmailJsConfigured()) {
-      setDevCode(pending.verification_code);
+      queueMicrotask(() => setDevCode(pending.verification_code));
     }
   }, [router]);
 
