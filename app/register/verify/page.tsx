@@ -10,7 +10,11 @@ import {
   setPendingRegistration,
   setSession,
 } from "@/lib/auth";
-import { isEmailJsConfigured, sendVerificationEmail } from "@/lib/emailjs";
+import {
+  isEmailJsConfigured,
+  sendVerificationEmail,
+  sendWelcomeEmail,
+} from "@/lib/emailjs";
 
 const inputClass =
   "mt-1.5 w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-center text-2xl tracking-[0.5em] text-white outline-none placeholder:text-slate-400 focus:border-blue-400/60 focus:bg-white/10";
@@ -74,6 +78,15 @@ export default function VerifyEmailPage() {
       });
       setSession(customer);
       clearPendingRegistration();
+      try {
+        await sendWelcomeEmail({
+          to_email: customer.email,
+          name: customer.name,
+        });
+      } catch (welcomeError) {
+        // Registration is already complete; never roll it back because of email.
+        console.warn("Could not send the welcome email:", welcomeError);
+      }
       router.replace("/");
     } catch (err) {
       setError(
