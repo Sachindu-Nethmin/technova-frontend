@@ -17,11 +17,22 @@ export default function SupplierPage() {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<SupplierSection>("overview");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const session = getSession();
-  const authReady = Boolean(session && session.role === "Supplier");
+  // Reading localStorage during render would make the server and first client
+  // render disagree. Hydrate the session after mount instead.
+  const [session, setSession] = useState<ReturnType<typeof getSession>>(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    if (authReady) return;
+    queueMicrotask(() => {
+      setSession(getSession());
+      setAuthChecked(true);
+    });
+  }, []);
+
+  const authReady = authChecked && session?.role === "Supplier";
+
+  useEffect(() => {
+    if (!authChecked || authReady) return;
     if (!session) {
       router.replace("/login");
       return;
@@ -33,7 +44,7 @@ export default function SupplierPage() {
         ? "/cashier"
         : "/customer",
     );
-  }, [authReady, router, session]);
+  }, [authChecked, authReady, router, session]);
 
   function handleLogout() {
     clearSession();
