@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   mockSupplierProducts,
   mockRestockRequests,
@@ -8,10 +8,20 @@ import {
   mockReturnedProducts,
   type RestockRequest,
 } from "@/lib/supplierData";
+import { apiFetch } from "@/lib/auth";
 import { type SupplierSection } from "./sidebar";
 
 interface SupplierOverviewProps {
   onNavigate: (section: SupplierSection) => void;
+}
+
+interface SupplierAlert {
+  id: number;
+  type: string;
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
 }
 
 export default function SupplierOverview({ onNavigate }: SupplierOverviewProps) {
@@ -19,6 +29,41 @@ export default function SupplierOverview({ onNavigate }: SupplierOverviewProps) 
   const [requests, setRequests] = useState<RestockRequest[]>(mockRestockRequests);
   const [deliveries] = useState(mockDeliveryDispatches);
   const [returns] = useState(mockReturnedProducts);
+  const [supplierId, setSupplierId] = useState<number | null>(null);
+  const [alerts, setAlerts] = useState<SupplierAlert[]>([]);
+  const [alertError, setAlertError] = useState("");
+
+  useEffect(() => {
+    queueMicrotask(async () => {
+      try {
+        const context = await apiFetch<{ supplier_id: number }>("/auth/supplier-context");
+        setSupplierId(context.supplier_id);
+        const notifications = await apiFetch<SupplierAlert[]>(
+          `/suppliers/${context.supplier_id}/notifications`,
+        );
+        setAlerts(
+          notifications
+            .filter((note) => note.type === "low_stock" && !note.is_read)
+            .slice(0, 3),
+        );
+      } catch (err) {
+        setAlertError(err instanceof Error ? err.message : "Could not load stock alerts.");
+      }
+    });
+  }, []);
+
+  async function markAlertRead(notificationId: number) {
+    if (supplierId === null) return;
+    try {
+      await apiFetch(
+        `/suppliers/${supplierId}/notifications/${notificationId}/read`,
+        { method: "PATCH" },
+      );
+      setAlerts((previous) => previous.filter((note) => note.id !== notificationId));
+    } catch (err) {
+      setAlertError(err instanceof Error ? err.message : "Could not update the alert.");
+    }
+  }
 
   const pendingRequests = requests.filter((r) => r.status === "Pending Supplier Approval");
   const inTransitDeliveries = deliveries.filter(
@@ -87,11 +132,39 @@ export default function SupplierOverview({ onNavigate }: SupplierOverviewProps) 
           </div>
           <div>
             <h3 className="text-sm font-extrabold text-red-200">
-              Low-Stock Replenishment Alert from Store Owners
+              Low-Stock Alerts from TECHNOVA Admin
             </h3>
-            <p className="text-xs text-red-300/80 mt-0.5">
-              TECHNOVA Flagship (Colombo) ran out of Samsung 990 PRO SSDs and Kandy branch has only 1 Ryzen 7800X3D unit left.
-            </p>
+            {alerts.length > 0 ? (
+              <div className="mt-1 space-y-2">
+                {alerts.map((alert) => (
+                  <div
+                    key={alert.id}
+                    className="rounded-xl border border-red-400/20 bg-red-500/10 p-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs font-bold text-red-200">{alert.title}</span>
+                      <button
+                        type="button"
+                        onClick={() => markAlertRead(alert.id)}
+                        className="shrink-0 text-[10px] font-bold text-red-300 hover:text-white"
+                      >
+                        Mark read
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-red-300/80 mt-0.5">
+                      {alert.message}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-red-300/80 mt-0.5">
+                No low-stock alerts from TECHNOVA administrators right now.
+              </p>
+            )}
+            {alertError && (
+              <p className="mt-1 text-[11px] font-semibold text-rose-300">{alertError}</p>
+            )}
           </div>
         </div>
 
