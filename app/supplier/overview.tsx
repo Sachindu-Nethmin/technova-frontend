@@ -24,12 +24,33 @@ interface SupplierAlert {
   created_at: string;
 }
 
+interface SupplierSummary {
+  company_name: string;
+  contact_person: string;
+  email: string;
+  phone: string | null;
+  address: string | null;
+  vendor_code: string | null;
+  rating: number | null;
+  contract_status: string;
+  city: string | null;
+  unread_notifications: number;
+  products_catalogued: number;
+  deliveries_to_date: number;
+  units_supplied_to_date: number;
+  value_supplied_to_date: number;
+  returns_to_date: number;
+  pending_requests: number;
+}
+
 export default function SupplierOverview({ onNavigate }: SupplierOverviewProps) {
   const [products] = useState(mockSupplierProducts);
   const [requests, setRequests] = useState<RestockRequest[]>(mockRestockRequests);
   const [deliveries] = useState(mockDeliveryDispatches);
   const [returns] = useState(mockReturnedProducts);
   const [supplierId, setSupplierId] = useState<number | null>(null);
+  const [summary, setSummary] = useState<SupplierSummary | null>(null);
+  const [summaryError, setSummaryError] = useState("");
   const [alerts, setAlerts] = useState<SupplierAlert[]>([]);
   const [alertError, setAlertError] = useState("");
 
@@ -38,6 +59,10 @@ export default function SupplierOverview({ onNavigate }: SupplierOverviewProps) 
       try {
         const context = await apiFetch<{ supplier_id: number }>("/auth/supplier-context");
         setSupplierId(context.supplier_id);
+        const summaryData = await apiFetch<SupplierSummary>(
+          `/suppliers/${context.supplier_id}/me/dashboard-summary`,
+        );
+        setSummary(summaryData);
         const notifications = await apiFetch<SupplierAlert[]>(
           `/suppliers/${context.supplier_id}/notifications`,
         );
@@ -47,7 +72,9 @@ export default function SupplierOverview({ onNavigate }: SupplierOverviewProps) 
             .slice(0, 3),
         );
       } catch (err) {
-        setAlertError(err instanceof Error ? err.message : "Could not load stock alerts.");
+        const message = err instanceof Error ? err.message : "Could not load dashboard data.";
+        setSummaryError(message);
+        setAlertError(message);
       }
     });
   }, []);
@@ -120,6 +147,49 @@ export default function SupplierOverview({ onNavigate }: SupplierOverviewProps) 
 
         {/* Ambient glow */}
         <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-blue-600/15 blur-3xl pointer-events-none" />
+      </div>
+
+      {/* Lifetime supplier figures */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          {
+            label: "Deliveries To Date",
+            value: (summary?.deliveries_to_date ?? 0).toLocaleString("en-LK"),
+            suffix: "consignments",
+            accent: "text-emerald-300",
+          },
+          {
+            label: "Units Supplied To Date",
+            value: (summary?.units_supplied_to_date ?? 0).toLocaleString("en-LK"),
+            suffix: "units",
+            accent: "text-blue-300",
+          },
+          {
+            label: "Value Supplied To Date",
+            value: `Rs. ${(summary?.value_supplied_to_date ?? 0).toLocaleString("en-LK", { maximumFractionDigits: 0 })}`,
+            suffix: "all time",
+            accent: "text-amber-300",
+          },
+          {
+            label: "Returns To Date",
+            value: (summary?.returns_to_date ?? 0).toLocaleString("en-LK"),
+            suffix: `${summary?.unread_notifications ?? 0} unread notifications`,
+            accent: "text-purple-300",
+          },
+        ].map((metric) => (
+          <div
+            key={metric.label}
+            className="rounded-3xl border border-white/10 bg-slate-900/40 p-4 backdrop-blur-xl"
+          >
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              {metric.label}
+            </p>
+            <p className={`mt-2 font-mono text-xl font-black ${metric.accent}`}>
+              {metric.value}
+            </p>
+            <p className="mt-1 text-[11px] text-slate-500">{metric.suffix}</p>
+          </div>
+        ))}
       </div>
 
       {/* Critical Shop Low-Stock Warning Banner */}
@@ -210,7 +280,7 @@ export default function SupplierOverview({ onNavigate }: SupplierOverviewProps) 
             </div>
           </div>
           <div className="mt-3 font-mono text-2xl font-black text-white">
-            {pendingRequests.length} Restock POs
+            {summary?.pending_requests ?? pendingRequests.length} Restock POs
           </div>
           <div className="mt-1 text-xs text-amber-300 font-mono">
             <span>Value: Rs. {pendingRequests.reduce((s, r) => s + r.totalEstValue, 0).toLocaleString("en-LK")}</span>
